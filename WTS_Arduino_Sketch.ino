@@ -1,3 +1,6 @@
+#include <Wire.h>
+#include <Adafruit_BMP085.h>
+
 // Arduino UNO - FAN control + telemetry + STEPPER control (A4988 style STEP/DIR/EN)
 //
 // Commands:
@@ -14,6 +17,10 @@
 //   T fanAll=.. fan1=.. fan2=.. fan3=.. fan4=.. rpm1=.. rpm2=.. rpm3=.. rpm4=.. mpx_adc=.. bmp_p=.. bmp_t=.. as5600=.. step_pos=.. step_target=.. step_en=.. step_moving=.. step_sps=..
 
 #define BAUD 115200
+
+// ---------- BMP180 ----------
+Adafruit_BMP085 bmp;
+bool bmpOk = false;
 
 // ---------- FAN SETUP ----------
 const int FAN_PWM_PIN[4] = {3, 5, 6, 9};  // keep your existing fan pins
@@ -36,7 +43,6 @@ void setAllFans(int pct) {
 }
 
 // ---------- STEPPER SETUP (A4988 STEP/DIR/EN) ----------
-// IMPORTANT: avoid conflicts with FAN pins (fan uses D3 already).
 #define STEP_DIR_PIN   2
 #define STEP_STEP_PIN  4
 #define STEP_EN_PIN    7    // optional; A4988 EN is ACTIVE LOW
@@ -60,7 +66,7 @@ void stepSetEnable(bool en) {
 
 int clampSps(int v) {
   if (v < 10) return 10;
-  if (v > 4000) return 4000; // practical for UNO + A4988
+  if (v > 4000) return 4000; 
   return v;
 }
 
@@ -208,6 +214,7 @@ void handleLine(char* line) {
 
 void setup() {
   Serial.begin(BAUD);
+  Wire.begin();
 
   // Fans
   for (int i = 0; i < 4; i++) {
@@ -224,6 +231,14 @@ void setup() {
   digitalWrite(STEP_DIR_PIN, LOW);
   stepSetEnable(true);
   stepSetSpeedSps(step_sps);
+
+  // BMP180
+  bmpOk = bmp.begin();
+  if (bmpOk) {
+    Serial.println("OK BMP180 FOUND");
+  } else {
+    Serial.println("WARN BMP180 NOT FOUND");
+  }
 
   Serial.println("READY");
 }
@@ -260,10 +275,19 @@ void loop() {
     int rpm3 = fanPct[2] * 40;
     int rpm4 = fanPct[3] * 40;
 
-    // Simulated sensors (until real wiring)
+    // MPX still fake for now
     int mpx_adc = (now / 10) % 1024;
-    float bmp_p = 1000.0 + (fanAll * 0.2);
-    float bmp_t = 25.0 + (fanAll * 0.02);
+
+    // BMP180 readings
+    float bmp_p = 0.0f;
+    float bmp_t = 0.0f;
+
+    if (bmpOk) {
+      bmp_t = bmp.readTemperature();
+      bmp_p = bmp.readPressure() / 100.0f; // hPa
+    }
+
+    // AS5600 still fake for now
     float as5600 = (now / 100) % 360;
 
     Serial.print("T ");
