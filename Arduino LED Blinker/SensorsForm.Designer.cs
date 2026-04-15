@@ -111,7 +111,7 @@
 
             y += 6;
 
-            SetupRow(lblMpxAdcK, lblMpxAdcV, xK, xV, y, "MPXV7002 (ADC)"); y += dy;
+            SetupRow(lblMpxAdcK, lblMpxAdcV, xK, xV, y, "MPXV7002 (mBar)"); y += dy;
             SetupRow(lblBmpPK, lblBmpPV, xK, xV, y, "BMP280 Pressure (hPa)"); y += dy;
             SetupRow(lblBmpTK, lblBmpTV, xK, xV, y, "BMP280 Temp (°C)"); y += dy;
             SetupRow(lblAs5600K, lblAs5600V, xK, xV, y, "AS5600 Angle (deg)"); y += dy;
