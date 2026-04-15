@@ -103,6 +103,37 @@ void clearEncoderZeroInEEPROM()
 }
 
 // =====================================================
+// MPXV7002DP
+// =====================================================
+#define MPX_PIN A0
+
+float readMPXV7002_mbar()
+{
+  // Average several samples for stability
+  const int samples = 16;
+  long sum = 0;
+  for (int i = 0; i < samples; i++)
+  {
+    sum += analogRead(MPX_PIN);
+  }
+
+  float adc = sum / (float)samples;
+
+  // Convert ADC to voltage (assuming 5.0V Arduino analog reference)
+  float voltage = adc * (5.0f / 1023.0f);
+
+  // MPXV7002DP transfer function:
+  // Vout = Vs * (0.2 * P + 0.5), with P in kPa and Vs = 5V
+  // => P(kPa) = (Vout / Vs - 0.5) / 0.2
+  float pressure_kPa = ((voltage / 5.0f) - 0.5f) / 0.2f;
+
+  // Convert kPa to mbar
+  float pressure_mbar = pressure_kPa * 10.0f;
+
+  return pressure_mbar;
+}
+
+// =====================================================
 // FAN SETUP
 // =====================================================
 const int FAN_PWM_PIN[4] = {3, 5, 6, 9};
@@ -365,6 +396,9 @@ void setup()
     analogWrite(FAN_PWM_PIN[i], 0);
   }
 
+  // MPX
+  pinMode(MPX_PIN, INPUT);
+
   // Stepper
   pinMode(STEP_DIR_PIN, OUTPUT);
   pinMode(STEP_STEP_PIN, OUTPUT);
@@ -436,8 +470,8 @@ void loop()
     int rpm3 = fanPct[2] * 40;
     int rpm4 = fanPct[3] * 40;
 
-    // MPX still fake for now
-    int mpx_adc = (now / 10) % 1024;
+    // MPX real in mbar
+    float mpx_mbar = readMPXV7002_mbar();
 
     // BMP180 real
     float bmp_p = 0.0f;
@@ -445,7 +479,7 @@ void loop()
     if (bmpOk)
     {
       bmp_t = bmp.readTemperature();
-      bmp_p = bmp.readPressure() / 100.0f; // hPa
+      bmp_p = bmp.readPressure() / 100.0f; // hPa = mbar
     }
 
     // AS5600 real, signed relative to saved home
@@ -467,7 +501,7 @@ void loop()
     Serial.print(" rpm3=");  Serial.print(rpm3);
     Serial.print(" rpm4=");  Serial.print(rpm4);
 
-    Serial.print(" mpx_adc="); Serial.print(mpx_adc);
+    Serial.print(" mpx_adc="); Serial.print(mpx_mbar, 1);
     Serial.print(" bmp_p=");   Serial.print(bmp_p, 1);
     Serial.print(" bmp_t=");   Serial.print(bmp_t, 1);
     Serial.print(" as5600=");  Serial.print(as5600, 1);
