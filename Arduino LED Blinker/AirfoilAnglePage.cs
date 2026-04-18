@@ -17,9 +17,11 @@ namespace UnoLedControl
 
         private bool _connected;
 
-        // UI
         private TrackBar tbAngle;
         private NumericUpDown nudAngle;
+        private TrackBar tbSpeed;
+        private Label lblSpeedVal;
+
         private Button btnSet;
         private Button btnStop;
         private Button btnHome;
@@ -30,21 +32,23 @@ namespace UnoLedControl
         private Label vError;
         private Label vCmd;
 
-        // State
         private double _targetDeg = 0.0;
         private bool _pendingSend;
         private bool _startupSynced = false;
 
-        // Cache (prevents blinking)
+        private int _stepperSps = DefaultSps;
+
         private readonly Dictionary<Label, string> _last = new Dictionary<Label, string>();
 
         private const int MinAngleDeg = -180;
         private const int MaxAngleDeg = 180;
 
-        // Tune this to your mechanics
-        private const double StepsPerDegree = 0.556;
+        // 1/8 microstep, 200 step motor, direct drive
+        private const double StepsPerDegree = 4.444;
 
-        private const int DefaultSps = 800;
+        private const int MinSps = 100;
+        private const int MaxSps = 3000;
+        private const int DefaultSps = 1200;
 
         private long _lastSentTargetSteps = long.MinValue;
 
@@ -75,7 +79,7 @@ namespace UnoLedControl
                 if (_pendingSend)
                 {
                     _pendingSend = false;
-                    SendStepperGotoDeg(_targetDeg, DefaultSps);
+                    SendStepperGotoDeg(_targetDeg, _stepperSps);
                 }
             };
 
@@ -221,7 +225,8 @@ namespace UnoLedControl
             controlGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 320));
             body.Controls.Add(controlGrid);
 
-            controlGrid.RowCount = 1;
+            controlGrid.RowCount = 2;
+            controlGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
             controlGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
 
             var lbl = new Label
@@ -279,7 +284,7 @@ namespace UnoLedControl
 
             btnSet = new Button { Text = "SET", Size = new Size(70, 36) };
             StyleButton(btnSet);
-            btnSet.Click += (s, e) => SendStepperGotoDeg(_targetDeg, DefaultSps);
+            btnSet.Click += (s, e) => SendStepperGotoDeg(_targetDeg, _stepperSps);
             btnGrid.Controls.Add(btnSet);
 
             btnHome = new Button { Text = "HOME", Size = new Size(80, 36) };
@@ -288,8 +293,8 @@ namespace UnoLedControl
             {
                 _targetDeg = 0.0;
                 _lastSentTargetSteps = long.MinValue;
-                Send("STEPPER GOTO 0 " + DefaultSps);
-                SetIfChanged(vCmd, "STEPPER GOTO 0 " + DefaultSps);
+                Send("STEPPER GOTO 0 " + _stepperSps);
+                SetIfChanged(vCmd, "STEPPER GOTO 0 " + _stepperSps);
                 SetTarget(0.0, sendNow: false);
             };
             btnGrid.Controls.Add(btnHome);
@@ -301,13 +306,55 @@ namespace UnoLedControl
                 Send("ENCODER ZERO");
                 SetIfChanged(vCmd, "ENCODER ZERO");
 
-                // Wait for fresh telemetry from Arduino after zeroing
                 _startupSynced = false;
                 _targetDeg = 0.0;
                 _lastSentTargetSteps = 0;
                 SetTarget(0.0, sendNow: false);
             };
             btnGrid.Controls.Add(btnSetHome);
+
+            var lblSpeed = new Label
+            {
+                Text = "Speed (sps)",
+                ForeColor = Color.Gainsboro,
+                BackColor = Color.Transparent,
+                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Margin = new Padding(0, 8, 0, 8)
+            };
+            controlGrid.Controls.Add(lblSpeed, 0, 1);
+
+            lblSpeedVal = new Label
+            {
+                Text = _stepperSps.ToString(CultureInfo.InvariantCulture),
+                ForeColor = Color.White,
+                BackColor = Color.Transparent,
+                Font = new Font("Consolas", 12f, FontStyle.Bold),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Margin = new Padding(0, 8, 0, 8)
+            };
+            controlGrid.Controls.Add(lblSpeedVal, 1, 1);
+
+            tbSpeed = new TrackBar
+            {
+                Minimum = MinSps,
+                Maximum = MaxSps,
+                TickFrequency = 200,
+                LargeChange = 100,
+                SmallChange = 50,
+                Value = DefaultSps,
+                Anchor = AnchorStyles.Left | AnchorStyles.Right,
+                Height = 45,
+                Margin = new Padding(6, 14, 6, 14)
+            };
+            tbSpeed.Scroll += (s, e) =>
+            {
+                _stepperSps = tbSpeed.Value;
+                lblSpeedVal.Text = _stepperSps.ToString(CultureInfo.InvariantCulture);
+            };
+            controlGrid.Controls.Add(tbSpeed, 2, 1);
 
             body.Controls.Add(MakeSectionHeader("Live feedback"));
 
@@ -462,7 +509,6 @@ namespace UnoLedControl
 
             if (TryParseDouble(asStr, out var actual))
             {
-                // First valid angle after startup: sync UI to real physical position
                 if (!_startupSynced)
                 {
                     _startupSynced = true;
